@@ -55,6 +55,9 @@ module.exports.CreateWebServer = function (parent, db, args, certificates) {
     obj.crypto = require('crypto');
     obj.common = require('./common.js');
     obj.express = require('express');
+    obj.i18next = require('i18next');
+    obj.i18nextMiddleware = require('i18next-express-middleware');
+    obj.i18nextBackend = require('i18next-node-fs-backend');
     obj.meshAgentHandler = require('./meshagent.js');
     obj.meshRelayHandler = require('./meshrelay.js');
     obj.meshIderHandler = require('./amt/amt-ider.js');
@@ -3197,12 +3200,28 @@ module.exports.CreateWebServer = function (parent, db, args, certificates) {
             obj.tlsServer.on('resumeSession', function (id, cb) { cb(null, tlsSessionStore[id.toString('hex')] || null); });
             obj.expressWs = require('express-ws')(obj.app, obj.tlsServer);
         }
+        
+        // Initialize i18next
+        obj.i18next
+            .use(obj.i18nextBackend)
+            .use(obj.i18nextMiddleware.LanguageDetector)
+            .init({
+                backend: {
+                    loadPath: __dirname + '/locales/{{lng}}/{{ns}}.json',
+                    addPath: __dirname + '/locales/{{lng}}/{{ns}}.missing.json'
+                },
+                fallbackLng: 'en',
+                preload: ['en'],
+                saveMissing: true,
+                saveMissingTo: 'all'
+            });
 
         // Setup middleware
         obj.app.engine('handlebars', obj.exphbs({ defaultLayout: null })); // defaultLayout: 'main'
         obj.app.set('view engine', 'handlebars');
         if (obj.args.trustedproxy) { obj.app.set('trust proxy', obj.args.trustedproxy); } // Reverse proxy should add the "X-Forwarded-*" headers
         else if (obj.args.tlsoffload) { obj.app.set('trust proxy', obj.args.tlsoffload); } // Reverse proxy should add the "X-Forwarded-*" headers
+        obj.app.use(obj.i18nextMiddleware.handle(obj.i18next));
         obj.app.use(obj.bodyParser.urlencoded({ extended: false }));
         var sessionOptions = {
             name: 'xid', // Recommended security practice to not use the default cookie name
